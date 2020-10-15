@@ -1,0 +1,4 @@
+---
+- name: restart firewall
+  systemd: name=firewall state=restarted
+  when: systemd_pid_1 is defined and systemd_pid_1
