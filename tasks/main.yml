@@ -8,6 +8,9 @@
   command: >
     iptables -F
     creates=/etc/firewall.bash
+  when:
+    - systemd_pid_1 is defined and systemd_pid_1
+    - ansible_virtualization_type != 'docker'
 
 - name: Copy firewall script into place.
   template:
@@ -18,23 +21,19 @@
     mode: 0744
   notify: restart firewall
 
-- name: Copy firewall init script into place.
-  template:
-    src: firewall.init.j2
-    dest: /etc/init.d/firewall
-    owner: root
-    group: root
-    mode: 0755
-  when: "ansible_service_mgr != 'systemd'"
-
-- name: Copy firewall systemd unit file into place (for systemd systems).
-  template:
-    src: firewall.unit.j2
-    dest: /etc/systemd/system/firewall.service
-    owner: root
-    group: root
-    mode: 0644
-  when: "ansible_service_mgr == 'systemd'"
+- name: create liferay service instance
+  import_role:
+    name: micko920.role_createservice
+  vars:
+    service_list:
+      - name: "firewall"
+        description: "Firewall"
+        start_command: "/etc/firewall.bash"
+        stop_command: "/sbin/iptables -F"
+        type: "oneshot"
+        after: "syslog.target network.target"
+        remain_after_exit: "yes"
+  when: systemd_pid_1 is defined and systemd_pid_1
 
 - name: Verify if br_netfilter module exists
   shell: "modinfo br_netfilter"
@@ -43,6 +42,9 @@
   register: modinfo_br_netfilter
   failed_when: modinfo_br_netfilter.rc not in [0, 1]
   changed_when: false
+  when:
+    - systemd_pid_1 is defined and systemd_pid_1
+    - ansible_virtualization_type != 'docker'
 
 - name: Verify br_netfilter module path exists
   file:
@@ -53,13 +55,19 @@
   modprobe:
     name: br_netfilter
     state: present
-  when: modinfo_br_netfilter.rc == 0
+  when:
+    - systemd_pid_1 is defined and systemd_pid_1
+    - ansible_virtualization_type != 'docker'
+    - modinfo_br_netfilter.rc == 0
 
 - name: Persist br_netfilter module
   copy:
     dest: /etc/modules-load.d/br_netfilter.conf
     content: br_netfilter
-  when: modinfo_br_netfilter.rc == 0
+  when:
+    - systemd_pid_1 is defined and systemd_pid_1
+    - ansible_virtualization_type != 'docker'
+    - modinfo_br_netfilter.rc == 0
 
 - name: update kernel bridge settings
   sysctl:
@@ -68,12 +76,18 @@
     sysctl_set: yes
     state: present
     reload: yes
+  when:
+    - systemd_pid_1 is defined and systemd_pid_1
+    - ansible_virtualization_type != 'docker'
 
 - name: sysctl ip forwarding is on
   sysctl:
     name: net.ipv4.ip_forward
     value: '1'
     sysctl_set: yes
+  when:
+    - systemd_pid_1 is defined and systemd_pid_1
+    - ansible_virtualization_type != 'docker'
 
 - name: Configure the firewall service.
   systemd:
